@@ -1,69 +1,95 @@
+"""Kafka producer that emits synthetic transaction events.
+
+A configurable share of events is deliberately faulty (duplicates, invalid
+amounts, late or malformed timestamps, unknown sources, missing user IDs) to
+exercise the validation, DLQ, and watermark logic downstream.
+"""
+
 import json
 import random
 import time
-from datetime import datetime, timezone, timedelta
+from collections import deque
+from datetime import datetime, timedelta, timezone
+
 from kafka import KafkaProducer
 
-producer = KafkaProducer(
-    bootstrap_servers=['localhost:9092'],
-    value_serializer=lambda x: json.dumps(x).encode('utf-8')
-)
+KAFKA_SERVERS = ["localhost:9092"]
+TOPIC_NAME = "transactions"
+VALID_SOURCES = ("mobile", "web", "pos")
 
-TOPIC_NAME = 'transactions'
-print(f"🚀 Producer aktif mengirim data ke topik: {TOPIC_NAME}")
+# Probability of each simulated fault, applied independently per event
+P_DUPLICATE = 0.05
+P_INVALID_AMOUNT = 0.07
+P_LATE_EVENT = 0.08
+P_INVALID_TIMESTAMP = 0.05
+P_UNKNOWN_SOURCE = 0.07
+P_MISSING_USER_ID = 0.06
 
-recent_events = []
+LATE_EVENT_DELAY = timedelta(minutes=5)  # exceeds the 3-minute watermark
+INVALID_AMOUNTS = (-25_000, 15_000_000)
 
-def generate_transaction():
-    choice = random.random()
-    
-    # 1. Simulasi Duplicate Event
-    if choice < 0.05 and recent_events:
+recent_events = deque(maxlen=10)
+
+
+def chance(probability: float) -> bool:
+    return random.random() < probability
+
+
+def iso_utc(delay: timedelta = timedelta(0)) -> str:
+    return (datetime.now(timezone.utc) - delay).isoformat().replace("+00:00", "Z")
+
+
+def generate_transaction() -> dict:
+    # Re-send a recent event to simulate a duplicate
+    if recent_events and chance(P_DUPLICATE):
         return random.choice(recent_events)
 
-    user_id = f"U{random.randint(10000, 99999)}"
-    
-    # 2. Simulasi Amount Invalid (Negatif / Terlalu Besar)
-    if choice < 0.12:
-        amount = random.choice([-25000, 15000000])
+    if chance(P_INVALID_AMOUNT):
+        amount = random.choice(INVALID_AMOUNTS)
     else:
-        amount = random.randint(50000, 5000000)
+        amount = random.randint(50_000, 5_000_000)
 
-    # 3. Simulasi Late Event (> 3 menit) atau Invalid Timestamp
-    now = datetime.now(timezone.utc)
-    if choice < 0.20:
-        event_time = (now - timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
-    elif choice < 0.25:
-        event_time = "INVALID_TIME_FORMAT"
+    if chance(P_INVALID_TIMESTAMP):
+        timestamp = "INVALID_TIME_FORMAT"
+    elif chance(P_LATE_EVENT):
+        timestamp = iso_utc(LATE_EVENT_DELAY)
     else:
-        event_time = now.isoformat().replace("+00:00", "Z")
+        timestamp = iso_utc()
 
-    # 4. Simulasi Source Tidak Dikenal
-    if choice < 0.32:
+    if chance(P_UNKNOWN_SOURCE):
         source = "smartwatch"
     else:
-        source = random.choice(["mobile", "web", "pos"])
+        source = random.choice(VALID_SOURCES)
 
     event = {
-        "user_id": user_id if choice > 0.38 else None,
+        "user_id": None if chance(P_MISSING_USER_ID) else f"U{random.randint(10000, 99999)}",
         "amount": amount,
-        "timestamp": event_time,
-        "source": source
+        "timestamp": timestamp,
+        "source": source,
     }
-
-    if len(recent_events) > 10:
-        recent_events.pop(0)
     recent_events.append(event)
     return event
 
-if __name__ == "__main__":
+
+def main():
+    producer = KafkaProducer(
+        bootstrap_servers=KAFKA_SERVERS,
+        value_serializer=lambda x: json.dumps(x).encode("utf-8"),
+    )
+    print(f"Producer started, sending events to topic: {TOPIC_NAME}")
+
     try:
         while True:
-            data = generate_transaction()
-            producer.send(TOPIC_NAME, value=data)
-            producer.flush()
-            print(f"Sent: {data}")
+            event = generate_transaction()
+            producer.send(TOPIC_NAME, value=event)
+            print(f"Sent: {event}")
             time.sleep(random.uniform(1.0, 2.0))
     except KeyboardInterrupt:
+        print("Producer stopped.")
+    finally:
+        producer.flush()
         producer.close()
-        print("Producer dihentikan.")
+
+
+if __name__ == "__main__":
+    main()

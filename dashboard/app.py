@@ -1,84 +1,109 @@
+"""Streamlit dashboard that monitors the valid and DLQ Kafka topics in real time."""
+
 import json
 import time
-from collections import deque
-from threading import Thread, Lock
+from collections import Counter, deque
+from dataclasses import dataclass, field
+from threading import Lock, Thread
 
 import pandas as pd
 import streamlit as st
 from kafka import KafkaConsumer
 
-st.set_page_config(page_title="Real-Time Streaming Dashboard", page_icon="📊", layout="wide")
+KAFKA_SERVERS = ["localhost:9092"]
+TOPIC_VALID = "transactions_valid"
+TOPIC_DLQ = "transactions_dlq"
+CONSUMER_GROUP = "dashboard-consumer-group"
 
-st.title("📊 Real-Time Streaming Data Pipeline Dashboard")
-st.markdown("Memantau arus transaksi data, validasi, dan *Dead Letter Queue (DLQ)* secara *real-time* dari Apache Kafka.")
+MAX_LOG_SIZE = 500
+TABLE_ROWS = 15
+REFRESH_SECONDS = 2
+DISPLAY_COLUMNS = ["received_at", "topic", "user_id", "amount", "source", "timestamp", "error_reason"]
 
-col1, col2, col3 = st.columns(3)
+
+@dataclass
+class EventStore:
+    """State shared between the Kafka consumer thread and the Streamlit UI."""
+
+    lock: Lock = field(default_factory=Lock)
+    log: deque = field(default_factory=lambda: deque(maxlen=MAX_LOG_SIZE))
+    counts: Counter = field(default_factory=Counter)
+    error: str | None = None
 
 
 @st.cache_resource
-def get_store():
-    # Penyimpanan bersama antara thread consumer dan halaman Streamlit
-    return {"lock": Lock(), "log": deque(maxlen=500), "error": None}
+def get_store() -> EventStore:
+    return EventStore()
 
 
-def consume_kafka(store):
-    # Jangan panggil st.* di sini, thread ini tidak punya konteks Streamlit
+def consume_kafka(store: EventStore) -> None:
+    # Runs in a background thread: do not call st.* functions here.
     try:
         consumer = KafkaConsumer(
-            'transactions_valid',
-            'transactions_dlq',
-            bootstrap_servers=['localhost:9092'],
-            auto_offset_reset='earliest',
+            TOPIC_VALID,
+            TOPIC_DLQ,
+            bootstrap_servers=KAFKA_SERVERS,
+            auto_offset_reset="earliest",
             enable_auto_commit=True,
-            group_id='dashboard-consumer-group',
-            value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+            group_id=CONSUMER_GROUP,
+            value_deserializer=lambda x: json.loads(x.decode("utf-8")),
         )
         for message in consumer:
             record = message.value
-            record['topic'] = message.topic
-            record['received_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
-            with store["lock"]:
-                store["log"].append(record)
-    except Exception as e:
-        store["error"] = str(e)
-        print(f"Kafka consumer error: {e}")
+            record["topic"] = message.topic
+            record["received_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            with store.lock:
+                store.log.append(record)
+                store.counts[message.topic] += 1
+    except Exception as exc:
+        store.error = str(exc)
+        print(f"Kafka consumer error: {exc}")
 
 
 @st.cache_resource
-def start_background_consumer():
+def start_consumer() -> Thread:
+    thread = Thread(target=consume_kafka, args=(get_store(),), daemon=True)
+    thread.start()
+    return thread
+
+
+def share(count: int, total: int) -> str | None:
+    return f"{count / total:.0%} of total" if total else None
+
+
+@st.fragment(run_every=REFRESH_SECONDS)
+def render_live_view() -> None:
     store = get_store()
-    t = Thread(target=consume_kafka, args=(store,), daemon=True)
-    t.start()
-    return t
+
+    if store.error:
+        st.error(f"Kafka consumer stopped: {store.error}")
+
+    with store.lock:
+        records = list(store.log)
+        valid = store.counts[TOPIC_VALID]
+        dlq = store.counts[TOPIC_DLQ]
+    total = valid + dlq
+
+    col_total, col_valid, col_dlq = st.columns(3)
+    col_total.metric("Total Events Processed", total)
+    col_valid.metric("Valid Transactions", valid, delta=share(valid, total))
+    col_dlq.metric("DLQ (Invalid Events)", dlq, delta=share(dlq, total), delta_color="inverse")
+
+    st.subheader("📥 Live Stream Events Log")
+    if not records:
+        st.info("Waiting for data from Kafka. Make sure the producer and the Spark job are running.")
+        return
+
+    latest = pd.DataFrame(records).tail(TABLE_ROWS).iloc[::-1]
+    st.dataframe(latest.reindex(columns=DISPLAY_COLUMNS), hide_index=True)
 
 
-store = get_store()
-start_background_consumer()
+st.set_page_config(page_title="Real-Time Streaming Dashboard", page_icon="📊", layout="wide")
+st.title("📊 Real-Time Streaming Data Pipeline Dashboard")
+st.markdown(
+    "Monitor transaction flow, validation results, and the *Dead Letter Queue (DLQ)* "
+    "in real time from Apache Kafka."
+)
 
-st.subheader("📥 Live Stream Events Log")
-
-if store["error"]:
-    st.error(f"Kafka consumer berhenti: {store['error']}")
-
-with store["lock"]:
-    records = list(store["log"])
-
-if records:
-    df = pd.DataFrame(records)
-
-    valid_count = len(df[df['topic'] == 'transactions_valid'])
-    dlq_count = len(df[df['topic'] == 'transactions_dlq'])
-
-    with col1:
-        st.metric("Total Events Processed", len(df))
-    with col2:
-        st.metric("Valid Transactions", valid_count, delta="Success")
-    with col3:
-        st.metric("DLQ (Invalid/Errors)", dlq_count, delta="-Errors", delta_color="inverse")
-
-    st.dataframe(df.tail(15), use_container_width=True)
-else:
-    st.info("Menunggu data masuk dari Kafka... Pastikan Producer dan Spark Job sedang berjalan.")
-
-time.sleep(2)
-st.rerun()
+start_consumer()
+render_live_view()
