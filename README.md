@@ -42,7 +42,7 @@ This repository contains the end-to-end streaming data pipeline assignment proje
 ![Kafka Producer Output](assets/kafka-producer.png)
 
 ### 2. PySpark Structured Streaming & Validation Output
-*atch validation summary and window table with timestamp and cumulative running_total:*
+*batch validation summary and window table with timestamp and cumulative running_total:*
 ![Spark Terminal Output](assets/spark-terminal.png)
 
 ### 3. Real-Time Streamlit Monitoring Dashboard
