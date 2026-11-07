@@ -1,20 +1,20 @@
 # Real-Time Streaming Data Pipeline (Kafka & PySpark)
 
-This repository contains the end-to-end streaming data pipeline assignment project[cite: 1, 5]. The architecture is designed to process real-time transaction event streams using **Apache Kafka** as a message broker and **PySpark Structured Streaming** for transformation, data validation, watermarking, and Dead Letter Queue (DLQ) handling[cite: 3, 4, 5].
+This repository contains the end-to-end streaming data pipeline assignment project. The architecture is designed to process real-time transaction event streams using **Apache Kafka** as a message broker and **PySpark Structured Streaming** for transformation, data validation, watermarking, and Dead Letter Queue (DLQ) handling.
 
 ---
 
 ## 🏗️ Architecture & Features
 
 1. **Event Producer (`/producer/producer.py`)**:
-   - Generates random transaction events in JSON format (`user_id`, `amount`, `timestamp`, `source`) every 1–2 seconds[cite: 2].
-   - Simulates real-world data scenarios: valid data, invalid data (negative/excessive amounts, missing fields, unknown sources), duplicates, and late events for watermarking test purposes[cite: 2, 3].
+   - Generates random transaction events in JSON format (`user_id`, `amount`, `timestamp`, `source`) every 1–2 seconds.
+   - Simulates real-world data scenarios: valid data, invalid data (negative/excessive amounts, missing fields, unknown sources), duplicates, and late events for watermarking test purposes.
 
 2. **Stream Processing & Validation (`/streaming/spark_streaming_job.py`)**:
-   - Reads data in real-time from the Kafka topic `transactions`[cite: 3].
-   - Implements 5 Mandatory Validations (Mandatory fields, Data types, Amount range, Source check, and Duplicate detection)[cite: 3].
-   - **Routing Output**: Valid data is routed to `transactions_valid`, while errors/invalid data go to the **Dead Letter Queue (DLQ)** topic `transactions_dlq`[cite: 3].
-   - **Watermarking & Tumbling Window**: Implements watermarking and tumbling windows for transaction running total aggregations[cite: 3, 4].
+   - Reads data in real-time from the Kafka topic `transactions`.
+   - Implements 5 Mandatory Validations (Mandatory fields, Data types, Amount range, Source check, and Duplicate detection).
+   - **Routing Output**: Valid data is routed to `transactions_valid`, while errors/invalid data go to the **Dead Letter Queue (DLQ)** topic `transactions_dlq`.
+   - **Watermarking & Tumbling Window**: Implements watermarking and tumbling windows for transaction running total aggregations.
 
 3. **Real-Time Monitoring Dashboard (`/dashboard/app.py`)**:
    - Built using **Streamlit** to monitor pipeline performance in real-time.
@@ -56,7 +56,7 @@ streaming-data-pipeline/
 ```
 
 🚀 Getting Started & Installation
-Prerequisites
+### Prerequisites
 - Python 3.10+
 - Java (JDK 17 or 21)
 - Docker & Docker Compose
