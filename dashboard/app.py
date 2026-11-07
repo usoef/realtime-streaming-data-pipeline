@@ -37,7 +37,6 @@ def get_store() -> EventStore:
 
 
 def consume_kafka(store: EventStore) -> None:
-    # Runs in a background thread: do not call st.* functions here.
     try:
         consumer = KafkaConsumer(
             TOPIC_VALID,

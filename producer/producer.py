@@ -40,7 +40,6 @@ def iso_utc(delay: timedelta = timedelta(0)) -> str:
 
 
 def generate_transaction() -> dict:
-    # Re-send a recent event to simulate a duplicate
     if recent_events and chance(P_DUPLICATE):
         return random.choice(recent_events)
 

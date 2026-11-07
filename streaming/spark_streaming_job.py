@@ -44,7 +44,7 @@ MIN_AMOUNT = 1.0
 MAX_AMOUNT = 10_000_000.0
 
 WATERMARK_DELAY = "3 minutes"
-WATERMARK_SECONDS = 180  # must match WATERMARK_DELAY
+WATERMARK_SECONDS = 180
 WINDOW_DURATION = "1 minute"
 
 INPUT_SCHEMA = StructType([
@@ -100,7 +100,7 @@ def create_spark_session() -> SparkSession:
         .master("local[*]")
         .config("spark.jars.packages", KAFKA_PACKAGE)
         .config("spark.jars.ivy", IVY_DIR.as_posix())
-        .config("spark.sql.shuffle.partitions", "4")  # 200 is overkill for local mode
+        .config("spark.sql.shuffle.partitions", "4")
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
