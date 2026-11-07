@@ -55,19 +55,19 @@ streaming-data-pipeline/
 └── README.md                  # Project documentation
 ```
 
-🚀 Getting Started & Installation
+## 🚀 Getting Started & Installation
 ### Prerequisites
 - Python 3.10+
 - Java (JDK 17 or 21)
 - Docker & Docker Compose
 
-1. Run Kafka Infrastructure (Docker)
+### 1. Run Kafka Infrastructure (Docker)
 Start Zookeeper and Kafka in the background using Docker Compose:
 ```bash
 docker-compose up -d
 ```
 
-2. Create Kafka Topics
+### 2. Create Kafka Topics
 Create the necessary topics for this pipeline:
 ```bash
 docker exec -it kafka kafka-topics --create --topic transactions --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
@@ -75,26 +75,26 @@ docker exec -it kafka kafka-topics --create --topic transactions_valid --bootstr
 docker exec -it kafka kafka-topics --create --topic transactions_dlq --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 ```
 
-3. Run the Python Producer
+### 3. Run the Python Producer
 Open a new terminal and run the producer to start sending transaction events:
 ```bash
 python producer/producer.py
 ```
 
-4. Run the PySpark Streaming Job
+### 4. Run the PySpark Streaming Job
 Open a separate terminal to run the Spark streaming processing job:
 ```bash
 python streaming/spark_streaming_job.py
 ```
 
-5. Run the Monitoring Dashboard
+### 5. Run the Monitoring Dashboard
 Open another terminal to run the Streamlit dashboard:
 ```bash
 streamlit run dashboard/app.py
 ```
-Access the dashboard via your browser at: http://localhost:8501[cite: 8].
+(Access the dashboard via your browser at: http://localhost:8501).
 
 
-📝 Submission Details
+## 📝 Submission Details
 - Developed By: Yusuf
 - Tools: Apache Kafka, PySpark Structured Streaming, Streamlit, Docker 
